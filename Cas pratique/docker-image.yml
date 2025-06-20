@@ -1,36 +1,40 @@
 name: Build and Deploy to GCR
 
+# ici on défini sur quel évènement nous allons déclencher le workflow : quand on pousse sur la branche main ou lors d'un pull request
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
 
+# on défini les variables d'environnement qui permettront à Github Action de se connecter au registre et à définir le nom de l'image à partir du nom de votre projet
 env:
   REGISTRY: ${{ vars.REGISTRY }}
-  IMAGE_NAME: my-app
+  IMAGE_NAME: ${{ github.event.repository.name }}
 
+# création des jobs, nous en avons qu'un qui est "build-and-push"
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Actions utilisera cette image d'Ubuntu pour travailler
     
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    steps:  # déclaration des étapes menant au build et au push final
+    - name: Checkout code # il récupére votre code
+      uses: actions/checkout@v4 # action utilisée pour cette étape
 
-    - name: Set up Docker Buildx
+    - name: Set up Docker Buildx # configuration de buildx: il remplace la commande docker build et propose plus de fonctionnalité comme le build multi-architecture! notamment pour les MAC bizarre ;)
       uses: docker/setup-buildx-action@v3
 
-    - name: Authenticate to Google Cloud
+    - name: Authenticate to Google Cloud # étape d'authentification au registre GCR de Google Cloud
       uses: google-github-actions/auth@v2
       with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        credentials_json: ${{ secrets.GCP_SA_KEY }} # on lui passe en paramètre notre clé d'authentification
 
-    - name: Configure Docker for GCR
+    - name: Configure Docker for GCR # connexion de docker au registre GCR
       run: |
         echo '${{ secrets.GCP_SA_KEY }}' | docker login -u _json_key --password-stdin https://${{ vars.REGISTRY }}
 
-    - name: Extract metadata
+    - name: Extract metadata # permet de taguer automatiquement votre image en fonction du contexte spécifié, par exemple taguera avec latest si on travaille sur la branche par défaut, 
+      # ou avec le nom de la branche si on est dans une branche spécifique
       id: meta
       uses: docker/metadata-action@v5
       with:
@@ -41,7 +45,7 @@ jobs:
           type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
 
-    - name: Build and push Docker image
+    - name: Build and push Docker image # étape de build et de push vers le registre
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -51,5 +55,5 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Output image digest
+    - name: Output image digest # on affiche un message d'information si le workflow est arrivé ici sans encombre
       run: echo "Image pushed with digest ${{ steps.build.outputs.digest }}"
